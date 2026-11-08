@@ -14,8 +14,9 @@ Owned APIs (to agree with the team): `/parallelism/plan`, `/parallelism/benchmar
 | 1 | vLLM serving one model on one GPU | done |
 | 2 | Manual TP=2, PP=2, DP=2 on the same model | done (single request + 64-way load) |
 | 3 | Benchmark script `bench.py` + `run_config.sh`; TP1/TP2/PP2/DP2 under load | done — `results/step3-bench.md` |
-| 3b | Why single-copy configs lose throughput above 128 concurrent | in progress |
-| 4 | Memory feasibility + performance model | |
+| 3b | Why single-copy configs lose throughput above 128 concurrent | closed: client bottleneck found and fixed; TP=1 drop is server-side, cause open |
+| 4a | Memory model `planner/memory.py` (`python -m planner.check_memory`) | done: ≤ 3.5% on held-out points |
+| 4b | Performance model (TPOT, TTFT, throughput) | |
 | 5 | Planner: enumerate → filter → score → explain | |
 | 6 | Deployment templates + deployer | |
 | 7 | FastAPI service `/parallelism/*` | |
