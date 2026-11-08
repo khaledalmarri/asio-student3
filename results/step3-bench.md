@@ -1,5 +1,8 @@
 # Step 3: benchmark comparison (2026-11-08, gpu-02)
 
+> **Superseded at high concurrency.** These runs used one client process, which capped throughput at ~23k tok/s and
+> inflated TPOT p95 at 128–256 (see `step3b-collapse.md`, Experiment E). Low-concurrency rows (≤ 32) stand.
+
 Qwen/Qwen2.5-0.5B-Instruct, BF16, vLLM 0.31.0+cu126.abujafar1, `--gpu-memory-utilization 0.25 --max-model-len 4096`,
 GPUs 0 (TP1) and 0,1 (others), both shared with idle tenants. Workload: 512-token random-ID prompts, 128 output tokens
 (`ignore_eos`), 4× concurrency requests per level (min 16). All 24 levels: 0 failed requests.

@@ -23,6 +23,20 @@ Also ruled out earlier: CUDA graphs (largest capture size 512 ≥ 256; mode FULL
 3. The TP=1 drop at 256 is still unexplained. Next diagnostics: thread-level CPU (`top -H`) and vLLM's own
    `/metrics` (running/waiting requests, server-side TPOT) during the 256 level.
 
+## Experiment E: the client was a bottleneck
+
+Same DP=2 server (`--api-server-count 2`), 256 concurrent, only the client changed:
+
+| Client | tok/s | TPOT p95 | TTFT p95 |
+|---|---|---|---|
+| 1 process (`--procs 1`) | 25,009 | 10.03 ms | 410 ms |
+| 4 processes (`--procs 4`) | **33,772 (+35%)** | **6.48 ms** | 457 ms |
+
+One Python client process both capped throughput and inflated TPOT p95 (its threads timestamp chunks late).
+All Step 3 rows above ~15k tok/s, and all TPOT p95 values at 128–256, were measured with `--procs 1` and are
+client-limited. DP=2 with 4 client processes exceeds 2× TP=1's measured peak (30,728), i.e. it scales linearly.
+Step 3 is re-run with `PROCS=4` (labels `-v2`).
+
 ## Planner rule (holds regardless of the cause)
 
 Cap concurrency at ~128 requests per Qwen-0.5B copy on this node; above that, add copies (DP) instead of
