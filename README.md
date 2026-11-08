@@ -43,6 +43,18 @@ See `results/step1-2-manual.md` for the exact command.
 
 ## Benchmark
 
+One configuration end to end (start → wait healthy → benchmark → save log → remove):
+
+```bash
+./run_config.sh qwen0.5b-tp1 0
+./run_config.sh qwen0.5b-tp2 0,1 --tensor-parallel-size 2
+./run_config.sh qwen0.5b-pp2 0,1 --pipeline-parallel-size 2
+./run_config.sh qwen0.5b-dp2 0,1 --data-parallel-size 2
+```
+
+Results go to `results/results.jsonl`, server logs to `results/logs/<label>.log`.
+Benchmark an already-running server directly:
+
 ```bash
 python bench.py --model Qwen/Qwen2.5-0.5B-Instruct --label qwen0.5b-dp2 --concurrency 1 8 32 64 128 256
 ```
