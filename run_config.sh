@@ -36,7 +36,11 @@ sleep 5   # let the previous run's utilisation window expire, so this reading re
 nvidia-smi --query-gpu=index,memory.used,memory.total,utilization.gpu --format=csv,noheader -i "$GPUS" \
   | sed 's/^/  before: GPU /'
 
-docker run -d --name "$NAME" --gpus "\"device=$GPUS\"" --ipc=host -p "$PORT:8000" \
+# Inside the container the selected GPUs are renumbered 0..N-1. Set CUDA_VISIBLE_DEVICES explicitly so an
+# image default (this image ships one) cannot hide some of them.
+NGPU=$(echo "$GPUS" | tr ',' '\n' | wc -l)
+INNER=$(seq -s, 0 $((NGPU - 1)))
+docker run -d --name "$NAME" --gpus "\"device=$GPUS\"" -e CUDA_VISIBLE_DEVICES="$INNER" --ipc=host -p "$PORT:8000" \
   -v /root/.cache/huggingface:/hf:ro \
   -e HF_HOME=/hf -e HF_HUB_CACHE=/hf/hub -e HF_HUB_OFFLINE=1 -e VLLM_USE_FLASHINFER_SAMPLER=0 \
   --entrypoint vllm "$IMAGE" \
