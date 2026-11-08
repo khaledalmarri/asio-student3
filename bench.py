@@ -12,8 +12,9 @@ Prompts are random token IDs of an exact length, so every request has the
 same prompt size and the prefix cache cannot make repeats look fast.
 Standard library only: runs with any Python 3.8+.
 """
-import argparse, json, random, statistics, time, urllib.request
+import argparse, json, random, time, urllib.request
 from concurrent.futures import ThreadPoolExecutor
+from multiprocessing import Pool
 from datetime import datetime, timezone
 
 
@@ -75,18 +76,36 @@ def pct(values, p):
     return round(values[lo] + (values[hi] - values[lo]) * (k - lo), 2)
 
 
+def _client_process(job):
+    """One client process: `threads` concurrent streams, `n` requests in total."""
+    url, model, prompt_tokens, output_tokens, timeout, threads, n = job
+    with ThreadPoolExecutor(max_workers=threads) as pool:
+        return list(pool.map(lambda _: one_request(url, model, prompt_tokens, output_tokens, timeout), range(n)))
+
+
 def run_level(args, concurrency):
     n_requests = args.requests or max(4 * concurrency, 16)
-    start = time.perf_counter()
-    with ThreadPoolExecutor(max_workers=concurrency) as pool:
-        results = list(pool.map(lambda _: one_request(args.url, args.model, args.prompt_tokens,
-                                                      args.output_tokens, args.timeout),
-                                range(n_requests)))
-    wall = time.perf_counter() - start
+    # Split the load across several client processes so one Python process (GIL)
+    # does not become the bottleneck at high concurrency.
+    procs = max(1, min(args.procs, concurrency))
+    jobs = [(args.url, args.model, args.prompt_tokens, args.output_tokens, args.timeout,
+             concurrency // procs + (1 if i < concurrency % procs else 0),
+             n_requests // procs + (1 if i < n_requests % procs else 0)) for i in range(procs)]
+    if procs == 1:
+        start = time.perf_counter()
+        results = _client_process(jobs[0])
+        wall = time.perf_counter() - start
+    else:
+        with Pool(procs) as pool:          # processes start here, outside the timed region
+            pool.map(abs, range(procs))    # make sure every worker is up
+            start = time.perf_counter()
+            results = [r for part in pool.map(_client_process, jobs, chunksize=1) for r in part]
+            wall = time.perf_counter() - start
     ok = [r for r in results if r["ok"]]
     bad = [r for r in results if not r["ok"]]
     return {
         "concurrency": concurrency,
+        "client_procs": procs,
         "requests": n_requests,
         "ok": len(ok),
         "failed": len(bad),
@@ -111,6 +130,7 @@ def main():
     ap.add_argument("--concurrency", type=int, nargs="+", default=[1, 8, 32, 64, 128])
     ap.add_argument("--requests", type=int, default=0, help="requests per level (default 4x concurrency, min 16)")
     ap.add_argument("--timeout", type=float, default=600)
+    ap.add_argument("--procs", type=int, default=1, help="client processes to split the load across (use 4+ above ~15k tok/s)")
     ap.add_argument("--out", default="results.jsonl")
     args = ap.parse_args()
 

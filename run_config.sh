@@ -4,7 +4,8 @@
 # Usage:   ./run_config.sh <label> <gpus> [extra vllm flags...]
 # Example: ./run_config.sh qwen0.5b-tp2 0,1 --tensor-parallel-size 2
 #
-# Override defaults with env vars: MODEL_ID, MODEL_PATH, IMAGE, PORT, MEM, MAXLEN, CONC
+# Override defaults with env vars: MODEL_ID, MODEL_PATH, IMAGE, PORT, MEM, MAXLEN, CONC, PROCS
+# KEEP=1 starts the server and leaves it running (no benchmark); remove it with: docker rm -f student3-bench
 set -euo pipefail
 
 LABEL=$1; GPUS=$2; shift 2
@@ -15,12 +16,15 @@ PORT=${PORT:-8401}
 MEM=${MEM:-0.25}
 MAXLEN=${MAXLEN:-4096}
 CONC=${CONC:-"1 8 32 64 128 256"}
+PROCS=${PROCS:-4}
+KEEP=${KEEP:-0}
 NAME=student3-bench
 cd "$(dirname "$0")"
 mkdir -p results/logs
 
-# Always remove the container on exit (success, failure or Ctrl+C) so GPUs are freed.
-trap 'docker rm -f "$NAME" >/dev/null 2>&1 || true' EXIT
+# Remove the container on exit (success, failure or Ctrl+C) so GPUs are freed, unless KEEP=1.
+cleanup() { if [ "$KEEP" != "1" ] || [ "${HEALTHY:-0}" != "1" ]; then docker rm -f "$NAME" >/dev/null 2>&1 || true; fi; }
+trap cleanup EXIT
 docker rm -f "$NAME" >/dev/null 2>&1 || true
 
 echo "[$LABEL] GPUs $GPUS, flags: $*"
@@ -47,11 +51,17 @@ for i in $(seq 1 120); do
 done
 curl -sf "localhost:$PORT/health" >/dev/null || { echo "[$LABEL] not healthy after 10 min"; exit 1; }
 echo "[$LABEL] healthy after ~$((i * 5)) s"
+HEALTHY=1
 
 docker logs "$NAME" 2>&1 | grep -E "Model loading took|KV cache size|all-reduce backends" | sed 's/^.*INFO/  /'
 
+if [ "$KEEP" = "1" ]; then
+  echo "[$LABEL] KEEP=1: server left running on port $PORT. Remove with: docker rm -f $NAME"
+  exit 0
+fi
+
 python bench.py --url "http://localhost:$PORT" --model "$MODEL_ID" --label "$LABEL" \
-  --concurrency $CONC --out results/results.jsonl
+  --concurrency $CONC --procs "$PROCS" --out results/results.jsonl
 
 docker logs "$NAME" > "results/logs/$LABEL.log" 2>&1
 echo "[$LABEL] done; log saved to results/logs/$LABEL.log"
