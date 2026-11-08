@@ -15,7 +15,7 @@ Pending held-out tests on vLLM 0.31 (predictions recorded before running):
 
 | # | Config | Predicted KV tokens |
 |---|---|---|
-| 3 | Qwen2.5-7B PP2, mem 0.3, GPUs 0,1 | 578,471 |
+| 3 | Qwen2.5-7B PP2, mem 0.3, GPUs 0,1 | 578,471 → measured **568,048 (+1.8%), passed**; weights 7.15 GiB/stage vs 7.09 predicted |
 | 4 | Qwen2.5-7B TP4, mem 0.3, GPUs 0,1,4,5 | 1,397,907 |
 
 Known small bias: weights are under-predicted by ~0.8% (vLLM reports 14.29 vs 14.18 GiB for the 7B,

@@ -12,6 +12,7 @@ MEASURED = [
     (QWEN25_05B, 2, 1, 0.25, 0.46, 3_128_480, "0.31", "fit: TP extra"),
     (QWEN25_05B, 1, 2, 0.25, 0.59, 3_249_840, "0.31", "fit: PP factor"),
     (QWEN25_7B, 2, 1, 0.30, 7.16, 564_176, "0.31", "TEST (form chosen after seeing it)"),
+    (QWEN25_7B, 1, 2, 0.30, 7.15, 568_048, "0.31", "TEST (pre-registered)"),
     (LLAMA31_8B, 1, 1, 0.90, None, 442_464, "0.8.5", "fit: base + slope"),
     (LLAMA31_8B, 2, 1, 0.90, None, 983_520, "0.8.5", "fit: TP extra"),
     (LLAMA31_70B, 4, 1, 0.90, None, 449_056, "0.8.5", "TEST"),
