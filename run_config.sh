@@ -27,7 +27,11 @@ cleanup() { if [ "$KEEP" != "1" ] || [ "${HEALTHY:-0}" != "1" ]; then docker rm 
 trap cleanup EXIT
 docker rm -f "$NAME" >/dev/null 2>&1 || true
 
-echo "[$LABEL] GPUs $GPUS, flags: $*"
+HOST_PATH=/root/.cache/huggingface${MODEL_PATH#/hf}
+if [ ! -f "$HOST_PATH/config.json" ]; then
+  echo "[$LABEL] model not found on host: $HOST_PATH (download it first, or check MODEL_PATH)"; exit 1
+fi
+echo "[$LABEL] model $MODEL_ID, mem-util $MEM, GPUs $GPUS, flags: $*"
 sleep 5   # let the previous run's utilisation window expire, so this reading reflects other tenants
 nvidia-smi --query-gpu=index,memory.used,memory.total,utilization.gpu --format=csv,noheader -i "$GPUS" \
   | sed 's/^/  before: GPU /'
