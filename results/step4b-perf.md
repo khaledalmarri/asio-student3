@@ -75,3 +75,19 @@ qwen7b-tp2-v2       128     26.71  24.36    -9%     4,302   4,460    +4%  test
   test: mean |error| TPOT 6.4%, throughput 10.9%, worst TPOT 14%
 
 ```
+
+## Pre-registered test: new workload shapes (Qwen2.5-7B TP2, GPUs 0,1, 2026-11-08 16:43 UTC)
+
+Predictions were committed in the conversation before the run (model as of `fd11bff`, no refit since).
+
+| Workload | Conc | TPOT p50 pred | measured | error | tok/s pred | measured | error |
+|---|---|---|---|---|---|---|---|
+| RAG 2048 in / 128 out | 1 | 5.80 | 6.29 | −8% | 146 | 144 | +1% |
+| RAG 2048 in / 128 out | 32 | 22.95 | 23.92 | −4% | 1,184 | 1,176 | +1% |
+| Chat 128 in / 512 out | 1 | 5.77 | 6.29 | −8% | 147 | 158 | −7% |
+| Chat 128 in / 512 out | 32 | 6.50 | 7.29 | −11% | 4,180 | 4,244 | −2% |
+
+All four within the bar (TPOT ±15%, throughput ±25%). At 32 concurrent, long prompts made TPOT **3.28×** worse than
+long answers (predicted 3.53×): the prompt-interference term carries over to other prompt/output ratios.
+Systematic bias: TPOT under-predicted by ~8% for 7B TP2 at concurrency 1 (also seen in the held-out set).
+TTFT at concurrency 1 for a 2048-token prompt: 86 ms (not modelled).
