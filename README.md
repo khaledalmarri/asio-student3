@@ -43,6 +43,11 @@ pass the model as a local snapshot path, and `--attention-backend FLASH_ATTN
 --attention-config '{"flash_attn_version":2}'` (no FlashInfer in the image).
 See `results/step1-2-manual.md` for the exact command.
 
+Image environment (from `docker inspect`), relevant to anyone reusing it:
+`CUDA_VISIBLE_DEVICES=0,1` baked in (hides GPUs beyond two; `run_config.sh` overrides it),
+`TORCH_CUDA_ARCH_LIST=8.0` (built for A100 only), `TRITON_PTXAS_PATH=/usr/local/cuda/bin/ptxas` (CUDA 12.6 ptxas,
+likely what lets Triton kernels load on driver 560), NCCL 2.23.4, `VLLM_USE_DEEP_GEMM=0` (DeepGEMM is Hopper-only).
+
 ## Benchmark
 
 One configuration end to end (start → wait healthy → benchmark → save log → remove):
