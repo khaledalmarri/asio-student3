@@ -13,7 +13,8 @@ Owned APIs (to agree with the team): `/parallelism/plan`, `/parallelism/benchmar
 | 0 | Node inventory (gpu-02) | done |
 | 1 | vLLM serving one model on one GPU | done |
 | 2 | Manual TP=2, PP=2, DP=2 on the same model | done (single request + 64-way load) |
-| 3 | Benchmark script `bench.py` (TTFT, TPOT, throughput, errors) | in progress |
+| 3 | Benchmark script `bench.py` + `run_config.sh`; TP1/TP2/PP2/DP2 under load | done — `results/step3-bench.md` |
+| 3b | Why single-copy configs lose throughput above 128 concurrent | in progress |
 | 4 | Memory feasibility + performance model | |
 | 5 | Planner: enumerate → filter → score → explain | |
 | 6 | Deployment templates + deployer | |
