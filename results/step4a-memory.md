@@ -16,7 +16,13 @@ Pending held-out tests on vLLM 0.31 (predictions recorded before running):
 | # | Config | Predicted KV tokens |
 |---|---|---|
 | 3 | Qwen2.5-7B PP2, mem 0.3, GPUs 0,1 | 578,471 → measured **568,048 (+1.8%), passed**; weights 7.15 GiB/stage vs 7.09 predicted |
-| 4 | Qwen2.5-7B TP4, mem 0.3, GPUs 0,1,4,5 | 1,397,907 |
+| 4 | Qwen2.5-7B TP4, mem 0.3, GPUs 0,1,4,5 | 1,397,907 → measured **1,390,896 (+0.5%), passed**; weights 3.63 GiB/GPU vs 3.55 predicted. vLLM chose the CUSTOM all-reduce for 4 GPUs across both NUMA nodes (it requires full NVLink connectivity above 2 GPUs) |
 
 Known small bias: weights are under-predicted by ~0.8% (vLLM reports 14.29 vs 14.18 GiB for the 7B,
 0.93 vs 0.92 for the 0.5B); parameter counting ignores biases, norms and runtime buffers.
+
+## Status
+
+Two pre-registered tests on vLLM 0.31 passed (PP=2 +1.8%, TP=4 +0.5%). The model is usable for feasibility
+filtering on this node and image. Untested: TP=8, TP×PP combinations, models with hidden size > 3584 on vLLM 0.31,
+MoE models, quantized weights. The planner should keep a safety margin (e.g. require 10% spare KV) until these are covered.
