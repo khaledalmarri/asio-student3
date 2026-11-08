@@ -33,7 +33,7 @@ def test_deploy_dry_run_and_token(monkeypatch, tmp_path):
     monkeypatch.setattr(svc.deploy.resolve_snapshot, "__defaults__", (str(tmp_path),))
     r = client.post("/parallelism/deploy", json=BODY)
     assert r.status_code == 200 and r.json()["status"] == "planned"
-    assert r.json()["spec"]["max_concurrency_per_engine"] == 106
+    assert r.json()["spec"]["max_concurrency_per_engine"] == 97
     monkeypatch.setenv("ASIO_TOKEN", "s3cret")
     assert client.post("/parallelism/deploy", json={**BODY, "launch": True}).status_code == 401
     assert client.delete("/parallelism/deployments/x", headers={"X-ASIO-Token": "s3cret"}).status_code == 403

@@ -19,7 +19,7 @@ def test_docker_command_carries_plan_and_image_fixes():
     cmd = docker_run_cmd(_plan(), M, PATH, "x", 8401, P)
     s = shlex.join(cmd)
     assert '"device=0,1,4,5"' in cmd and "CUDA_VISIBLE_DEVICES=0,1,2,3" in s
-    assert "--tensor-parallel-size 4" in s and "--max-num-seqs 106" in s
+    assert "--tensor-parallel-size 4" in s and "--max-num-seqs 97" in s
     assert "FLASH_ATTN" in s and "/root/.cache/huggingface:/hf:ro" in s
     assert cmd[cmd.index("--entrypoint") + 3:][:2] == ["serve", PATH]
 
@@ -35,7 +35,7 @@ def test_compose_and_spec():
     y = compose_yaml(out, M, PATH, "svc", 8401, P)
     assert 'device_ids: ["0", "1", "4", "5"]' in y and "CUDA_VISIBLE_DEVICES" in y
     sp = spec(out, M, PATH, "svc", 8401, P)
-    assert sp["max_concurrency_per_engine"] == 106 and sp["gpu_ids"] == [0, 1, 4, 5]
+    assert sp["max_concurrency_per_engine"] == 97 and sp["gpu_ids"] == [0, 1, 4, 5]
     json.dumps(sp)
 
 

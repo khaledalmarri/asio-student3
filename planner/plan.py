@@ -19,7 +19,8 @@ from .perf import Workload, replica_load, throughput, tpot_p95_ms
 ENGINE_CAP = 128          # max concurrent requests per engine (single engines lose throughput above this, Step 3b)
 KV_SPARE = 0.10           # memory model untested outside its validation set: keep 10% spare KV
 NEAR_TIE = 0.05           # closer than this (≈ 2x run-to-run noise) = "benchmark to decide"
-SLA_HEADROOM = 0.90       # plan to 90% of the TPOT SLA: the model under-predicts TPOT by up to ~10-16% (Step 4b)
+SLA_HEADROOM = 0.85       # plan to 85% of the TPOT SLA. Was 0.90; the first end-to-end test (7B TP4 @106) measured
+                          # TPOT p95 15.53 ms vs 13.45 predicted (x1.155) and missed a 15 ms SLA. 1/1.155 = 0.866.
 PP_TPOT_PENALTY = 1.34    # measured once: Qwen-0.5B PP=2 vs TP=1 single-request TPOT (2.62 / 1.95 ms)
 CALIBRATED_MAX_PARAMS = 7.7e9  # largest model in the performance-model fit/test set (Qwen2.5-7B)
 
@@ -111,7 +112,7 @@ def score(req: PlanRequest, m: ModelSpec, tp: int, pp: int, dp: int) -> Candidat
     if best == 0:
         c.status = "rejected"
         c.reason = (f"SLA: even one request takes {tpot_p95_ms(m, tp, 1, w) * penalty:.1f} ms/token "
-                    f"(p95) > {limit:.1f} ms (90% of the {req.tpot_p95_ms} ms SLA)")
+                    f"(p95) > {limit:.1f} ms (85% of the {req.tpot_p95_ms} ms SLA)")
         return c
 
     c.concurrency_per_replica = best
@@ -181,7 +182,7 @@ def plan(req: PlanRequest) -> dict:
     explanation.append(
         f"Chosen {best.name} on {best.gpus} GPU(s): up to {best.concurrency_per_replica} requests per engine "
         f"({best.concurrency_total} total) at a predicted TPOT p95 of {best.tpot_p95_ms} ms "
-        f"(planned to 90% of the {req.tpot_p95_ms} ms SLA), {best.throughput_tok_s:,.0f} tok/s "
+        f"(planned to 85% of the {req.tpot_p95_ms} ms SLA), {best.throughput_tok_s:,.0f} tok/s "
         f"({best.per_gpu_tok_s:,.0f} per GPU).")
     for note in best.notes:
         explanation.append(f"Note: {note}.")

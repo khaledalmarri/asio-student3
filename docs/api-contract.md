@@ -20,7 +20,7 @@ Status: draft for team review. Field names may change; the planner logic (`plann
 | `model` | caller | Known model name or a path to the model folder on the node |
 | `workload.prompt_tokens`, `output_tokens` | Student 2 | Typical request shape (p50 is fine); drives prompt interference |
 | `workload.max_model_len` | caller | Longest request the deployment must accept; memory feasibility checks it |
-| `sla.tpot_p95_ms` | Student 2 | Per-token latency limit; the planner plans to 90% of it |
+| `sla.tpot_p95_ms` | Student 2 | Per-token latency limit; the planner plans to 85% of it |
 | `target_concurrency` | Student 2 (optional) | Requests in flight to sustain. Given → fewest GPUs that meet it. Omitted → maximise throughput on the allocation |
 | `allocation.gpu_ids` | Student 1 | GPUs this deployment may use (identified by index; UUIDs preferred later) |
 | `allocation.gpu_mem_util` | Student 1 | Fraction of each GPU's memory the deployment may reserve. Student 1 must guarantee that much is free |
@@ -54,11 +54,11 @@ Not yet supported (planned): `sla.ttft_p95_ms` (no TTFT model), MoE expert-paral
         5
       ]
     ],
-    "concurrency_per_replica": 106,
-    "concurrency_total": 106,
-    "tpot_p95_ms": 13.45,
-    "throughput_tok_s": 7200.0,
-    "per_gpu_tok_s": 1800.0,
+    "concurrency_per_replica": 97,
+    "concurrency_total": 97,
+    "tpot_p95_ms": 12.69,
+    "throughput_tok_s": 6981.0,
+    "per_gpu_tok_s": 1745.0,
     "kv_tokens_per_replica": 4993024,
     "vllm_args": [
       "--tensor-parallel-size",
@@ -70,28 +70,28 @@ Not yet supported (planned): `sla.ttft_p95_ms` (no TTFT model), MoE expert-paral
       "--max-model-len",
       "4096",
       "--max-num-seqs",
-      "106"
+      "97"
     ],
     "notes": []
   },
   "alternatives": [
     {
       "name": "TP=2 PP=1 DP=2",
-      "throughput_tok_s": 6380.0
+      "throughput_tok_s": 6055.0
     }
   ],
   "near_ties": [],
   "rejected": [
     {
       "name": "TP=1 PP=2 DP=1",
-      "reason": "PP not needed: a TP-only layout fits, and PP measured slower per token"
+      "reason": "SLA: even one request takes 13.3 ms/token (p95) > 12.8 ms (85% of the 15 ms SLA)"
     }
   ],
   "warnings": [],
   "explanation": [
     "Objective: maximise SLA-compliant throughput on the 4 GPUs g...",
-    "Chosen TP=4 PP=1 DP=1 on 4 GPU(s): up to 106 requests per en...",
-    "Runner-up TP=2 PP=1 DP=2: 6,380 tok/s (1,595 per GPU), 11% l..."
+    "Chosen TP=4 PP=1 DP=1 on 4 GPU(s): up to 97 requests per eng...",
+    "Runner-up TP=2 PP=1 DP=2: 6,055 tok/s (1,514 per GPU), 13% l..."
   ],
   "calibration": {
     "vllm_version": "0.31",
