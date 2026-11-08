@@ -28,6 +28,7 @@ trap cleanup EXIT
 docker rm -f "$NAME" >/dev/null 2>&1 || true
 
 echo "[$LABEL] GPUs $GPUS, flags: $*"
+sleep 5   # let the previous run's utilisation window expire, so this reading reflects other tenants
 nvidia-smi --query-gpu=index,memory.used,memory.total,utilization.gpu --format=csv,noheader -i "$GPUS" \
   | sed 's/^/  before: GPU /'
 

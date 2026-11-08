@@ -4,9 +4,10 @@ Replaces the high-concurrency rows of `step3-bench.md`. Client: `bench.py --proc
 Qwen/Qwen2.5-0.5B-Instruct BF16, vLLM 0.31.0+cu126.abujafar1, `--gpu-memory-utilization 0.25 --max-model-len 4096`,
 512-token random-ID prompts, 128 output tokens. DP=2 uses `--api-server-count 2`. 7872 requests, 0 failed.
 
-**Interference caveat:** `run_config.sh` printed GPU utilisation of 87–100% on GPUs 0/1 *before* the TP=2, PP=2 and
-DP=2 runs (0% before TP=1). Memory showed only the other tenants, so this is either tenant compute or the tail of the
-previous run's utilisation window; not separated. TP=2 and DP=2 at 256 match earlier runs within 1%.
+**Interference check:** `run_config.sh` printed 87–100% utilisation on GPUs 0/1 before the TP=2, PP=2 and DP=2 runs.
+Right after the sweep both GPUs read 0% with only the tenants' memory, and TP=2/DP=2 at 256 match earlier runs within
+1%, so these readings were most likely the tail of the previous run's utilisation window (nvidia-smi averages over a
+short past window). `run_config.sh` now waits 5 s before sampling.
 
 ## Output throughput (tok/s)
 
