@@ -1,0 +1,3 @@
+{"name": "student3-bench", "model": "Qwen/Qwen2.5-7B-Instruct", "layout": "TP=4 PP=1 DP=1", "gpu_ids": [0, 1, 4, 5], "max_num_seqs": 106, "result": "healthy", "startup_s": 101, "time": "2026-11-08T17:29:17+00:00"}
+{"name": "student3-bench", "model": "Qwen/Qwen2.5-7B-Instruct", "layout": "TP=4 PP=1 DP=1", "gpu_ids": [0, 1, 4, 5], "max_num_seqs": 97, "result": "healthy", "startup_s": 101, "time": "2026-11-08T17:51:40+00:00"}
+{"name": "student3-bench", "model": "Qwen/Qwen2.5-7B-Instruct", "layout": "TP=4 PP=1 DP=1", "gpu_ids": [0, 1, 4, 5], "max_num_seqs": 97, "result": "healthy", "startup_s": 101, "time": "2026-11-08T17:58:19+00:00"}

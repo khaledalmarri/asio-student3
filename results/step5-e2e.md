@@ -36,6 +36,14 @@ Applying test 1's measured ratios: expected TPOT p95 ≈ 12.69 × 1.155 ≈ **14
 | Throughput | 6,981 tok/s | 5,770 tok/s | **5,751 tok/s** | raw model still +21% |
 | Failed requests | — | — | 0 / 388 | ✓ |
 
-The fix worked, but the margin (2.5%) is inside the ~3% run-to-run noise measured in Step 3, so a repeat could
-miss. The raw performance model is still biased for TP=4 at high load (TPOT −13%, throughput +21%); the headroom
+Repeats on a fresh deployment of the same plan (same 97 cap):
+
+| Run | TPOT p95 | TPOT p50 | tok/s | Failed |
+|---|---|---|---|---|
+| 2 (first deployment) | 14.62 ms | 12.62 | 5,751 | 0/388 |
+| 2a (second deployment) | 14.57 ms | 13.84 | 5,791 | 0/388 |
+| 2b (second deployment) | 14.55 ms | 12.30 | 5,774 | 0/388 |
+
+**3 of 3 runs met the SLA**, spread 0.07 ms (0.5%), which is much tighter than the ~3% noise seen at other operating
+points. The margin to the SLA (~0.4 ms, 2.7%) is small but larger than this spread. The raw performance model is still biased for TP=4 at high load (TPOT −13%, throughput +21%); the headroom
 hides that rather than fixing it. Next: 2–3 repeats of this test, and an MFU-vs-TP term in `planner/perf.py`.
