@@ -19,7 +19,7 @@ Owned APIs (to agree with the team): `/parallelism/plan`, `/parallelism/benchmar
 | 4b | Performance model `planner/perf.py` (`python -m planner.fit_perf`, `python -m planner.check_decisions`) | done: held-out TPOT 6.4% mean error; 3/3 layout decisions agree (`results/step4b-perf.md`) |
 | 5 | Planner `planner/plan.py` (`python -m planner.plan ...`); API proposal `docs/api-contract.md` | end-to-end: test 1 missed the SLA (15.53 ms), headroom fixed, test 2 met it in 3/3 runs (14.55–14.62 ms ≤ 15) — `results/step5-e2e.md` |
 | 6 | Deployer `planner/deploy.py` (docker / compose / spec from a plan, `--launch`) | works on GPUs: 3 launches healthy in 101 s (`results/deployments.jsonl`) |
-| 7 | API `service/app.py` (`uvicorn service.app:app --port 8300`) | built; tested with TestClient |
+| 7 | API `service/app.py` (`uvicorn service.app:app --port 8300`) | runs on gpu-02: health, plan, live topology, metrics checked |
 | 8 | Disaggregation model `planner/disagg.py` + experiment plan `results/step8-disagg.md` | predictions only; Dynamo discovery pending |
 
 ## Other tools

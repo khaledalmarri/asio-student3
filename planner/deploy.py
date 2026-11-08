@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
+from . import topology
 from .plan import PlanRequest, plan
 
 HF_HOST = "/root/.cache/huggingface"
@@ -122,6 +123,22 @@ def spec(out: dict, model_id: str, model_path: str, name: str, port: int, profil
     }
 
 
+def check_gpus_free(gpu_ids: list[int], mem_util: float, run=None) -> list[str]:
+    """Problems that would make vLLM fail mid-load: a planned GPU lacks the memory the plan reserves."""
+    t = topology.discover(run) if run else topology.discover()
+    by = {g["index"]: g for g in t["gpus"]}
+    problems = []
+    for i in gpu_ids:
+        g = by.get(i)
+        if g is None:
+            problems.append(f"GPU {i} does not exist")
+            continue
+        need = int(mem_util * g["mem_total_mib"])
+        if g["mem_free_mib"] < need:
+            problems.append(f"GPU {i}: {g['mem_free_mib']:,} MiB free < {need:,} MiB the plan reserves")
+    return problems
+
+
 def launch(cmd: list[str], name: str, port: int, timeout_s: int = 900) -> dict:
     subprocess.run(["docker", "rm", "-f", name], capture_output=True)
     subprocess.run(cmd, check=True, capture_output=True, text=True)
@@ -184,6 +201,9 @@ def main() -> None:
     else:
         print(shlex.join(cmd))
     if a.launch:
+        problems = check_gpus_free(out["chosen"]["gpu_ids"], a.mem_util)
+        if problems:
+            raise SystemExit("not launching:\n- " + "\n- ".join(problems))
         res = launch(cmd, a.name, a.port)
         record({"name": a.name, "model": a.model, "layout": out["chosen"]["name"], "gpu_ids": out["chosen"]["gpu_ids"],
                 "max_num_seqs": out["chosen"]["concurrency_per_replica"], "result": res["status"],

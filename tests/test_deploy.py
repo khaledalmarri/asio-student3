@@ -46,3 +46,11 @@ def test_resolve_snapshot(tmp_path):
     assert resolve_snapshot(M, str(tmp_path)) == "/hf/hub/models--Qwen--Qwen2.5-7B-Instruct/snapshots/abc"
     with pytest.raises(FileNotFoundError):
         resolve_snapshot("nobody/missing", str(tmp_path))
+
+
+def test_free_memory_check_on_gpu02_snapshot():
+    from planner.deploy import check_gpus_free
+    from tests.test_topology import fake_smi
+    assert check_gpus_free([0, 1, 4, 5], 0.3, run=fake_smi) == []
+    problems = check_gpus_free([0, 6], 0.3, run=fake_smi)
+    assert len(problems) == 1 and problems[0].startswith("GPU 6")

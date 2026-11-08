@@ -185,6 +185,12 @@ def post_deploy(body: DeployBody, x_asio_token: str | None = Header(None)):
     if not body.launch:
         return {"status": "planned", "spec": sp}
     _auth(x_asio_token)
+    try:
+        problems = deploy.check_gpus_free(sp["gpu_ids"], body.allocation.gpu_mem_util)
+    except (FileNotFoundError, subprocess.CalledProcessError) as e:
+        raise HTTPException(503, f"cannot check GPUs (nvidia-smi): {e}")
+    if problems:
+        raise HTTPException(409, {"message": "planned GPUs lack free memory", "problems": problems})
     job = uuid.uuid4().hex[:12]
     _jobs[job] = {"id": job, "kind": "deploy", "status": "starting", "spec": sp}
 
