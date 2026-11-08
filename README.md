@@ -18,9 +18,18 @@ Owned APIs (to agree with the team): `/parallelism/plan`, `/parallelism/benchmar
 | 4a | Memory model `planner/memory.py` (`python -m planner.check_memory`) | done: pre-registered tests PP=2 +1.8%, TP=4 +0.5% (`results/step4a-memory.md`) |
 | 4b | Performance model `planner/perf.py` (`python -m planner.fit_perf`, `python -m planner.check_decisions`) | done: held-out TPOT 6.4% mean error; 3/3 layout decisions agree (`results/step4b-perf.md`) |
 | 5 | Planner `planner/plan.py` (`python -m planner.plan ...`); API proposal `docs/api-contract.md` | built; end-to-end validation on GPUs pending |
-| 6 | Deployment templates + deployer | |
-| 7 | FastAPI service `/parallelism/*` | |
-| 8 | Prefill/decode disaggregation with Dynamo | |
+| 6 | Deployer `planner/deploy.py` (docker / compose / spec from a plan, `--launch`) | built; tested without GPUs |
+| 7 | API `service/app.py` (`uvicorn service.app:app --port 8300`) | built; tested with TestClient |
+| 8 | Disaggregation model `planner/disagg.py` + experiment plan `results/step8-disagg.md` | predictions only; Dynamo discovery pending |
+
+## Other tools
+
+| Command | What it does |
+|---|---|
+| `python -m planner.topology [--free 30000]` | Live GPU state, NVLink/PCIe topology, free GPUs |
+| `python -m planner.capabilities` | Regenerates `results/capability-matrix.md` (declared vs validated) |
+| `python -m planner.check_memory` / `check_decisions` | Re-checks the models against every measurement |
+| `python -m pytest -q tests` | All tests (needs pytest; the service tests need fastapi + httpx) |
 
 ## Node facts (gpu-02, measured 2026-11-08)
 
