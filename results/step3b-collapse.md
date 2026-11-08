@@ -37,6 +37,21 @@ All Step 3 rows above ~15k tok/s, and all TPOT p95 values at 128–256, were mea
 client-limited. DP=2 with 4 client processes exceeds 2× TP=1's measured peak (30,728), i.e. it scales linearly.
 Step 3 is re-run with `PROCS=4` (labels `-v2`).
 
+Instrument check — is 4 enough? Same server, `--procs 8`: **32,717 tok/s** (−3% vs 4 processes, within noise).
+The client is no longer the bottleneck at 4 processes.
+
+TP=1 with 4 client processes:
+
+| Concurrency | `--procs 1` | `--procs 4` |
+|---|---|---|
+| 128 | 15,364 | 13,535 (TTFT p95 1,028 ms) |
+| 256 | 12,272 | **12,276** |
+
+The TP=1 drop at 256 is **real and server-side**: identical with either client. A single engine at 256 concurrent
+delivers ~12.3k tok/s, while two engines at ~128 each (DP=2) deliver ~33k. The 128 row varies by 12% between runs
+(cause not isolated; possibly burstier arrivals from 4 processes starting together). Root cause of the drop is left
+open; the planner rule below does not depend on it.
+
 ## Planner rule (holds regardless of the cause)
 
 Cap concurrency at ~128 requests per Qwen-0.5B copy on this node; above that, add copies (DP) instead of
