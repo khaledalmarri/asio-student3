@@ -74,3 +74,18 @@ LLAMA31_8B = ModelSpec("Llama-3.1-8B-Instruct", layers=32, hidden=4096, heads=32
                        intermediate=14336, vocab=128256, tied_embeddings=False, max_position=131072)
 LLAMA31_70B = ModelSpec("Llama-3.1-70B-Instruct", layers=80, hidden=8192, heads=64, kv_heads=8, head_dim=128,
                         intermediate=28672, vocab=128256, tied_embeddings=False, max_position=131072)
+
+
+KNOWN_MODELS = {
+    "Qwen/Qwen2.5-0.5B-Instruct": QWEN25_05B,
+    "Qwen/Qwen2.5-7B-Instruct": QWEN25_7B,
+    "meta-llama/Llama-3.1-8B-Instruct": LLAMA31_8B,
+    "meta-llama/Llama-3.1-70B-Instruct": LLAMA31_70B,
+}
+
+
+def resolve(model: str) -> ModelSpec:
+    """A known model name, or a path to a local model folder / config.json."""
+    if model in KNOWN_MODELS:
+        return KNOWN_MODELS[model]
+    return ModelSpec.from_path(model, name=model)

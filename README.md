@@ -17,7 +17,7 @@ Owned APIs (to agree with the team): `/parallelism/plan`, `/parallelism/benchmar
 | 3b | Why single-copy configs lose throughput above 128 concurrent | closed: client bottleneck found and fixed; TP=1 drop is server-side, cause open |
 | 4a | Memory model `planner/memory.py` (`python -m planner.check_memory`) | done: pre-registered tests PP=2 +1.8%, TP=4 +0.5% (`results/step4a-memory.md`) |
 | 4b | Performance model `planner/perf.py` (`python -m planner.fit_perf`, `python -m planner.check_decisions`) | done: held-out TPOT 6.4% mean error; 3/3 layout decisions agree (`results/step4b-perf.md`) |
-| 5 | Planner: enumerate → filter → score → explain | |
+| 5 | Planner `planner/plan.py` (`python -m planner.plan ...`); API proposal `docs/api-contract.md` | built; end-to-end validation on GPUs pending |
 | 6 | Deployment templates + deployer | |
 | 7 | FastAPI service `/parallelism/*` | |
 | 8 | Prefill/decode disaggregation with Dynamo | |
