@@ -68,6 +68,8 @@ class ModelSpec:
 # Architectures used for calibration (values from each model's config.json).
 QWEN25_05B = ModelSpec("Qwen2.5-0.5B-Instruct", layers=24, hidden=896, heads=14, kv_heads=2, head_dim=64,
                        intermediate=4864, vocab=151936, tied_embeddings=True, max_position=32768)
+QWEN25_7B = ModelSpec("Qwen2.5-7B-Instruct", layers=28, hidden=3584, heads=28, kv_heads=4, head_dim=128,
+                     intermediate=18944, vocab=152064, tied_embeddings=False, max_position=32768)
 LLAMA31_8B = ModelSpec("Llama-3.1-8B-Instruct", layers=32, hidden=4096, heads=32, kv_heads=8, head_dim=128,
                        intermediate=14336, vocab=128256, tied_embeddings=False, max_position=131072)
 LLAMA31_70B = ModelSpec("Llama-3.1-70B-Instruct", layers=80, hidden=8192, heads=64, kv_heads=8, head_dim=128,

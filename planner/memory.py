@@ -5,7 +5,7 @@ weights / GPU   = largest pipeline stage's weights / TP
                   (TP splits everything incl. the vocabulary; PP cannot split the embedding:
                    first stage holds the input embedding, last stage the output head - a copy when tied)
 KV bytes/token  = 2 (K,V) x layers in the stage x ceil(kv_heads / TP) x head_dim x bytes
-overhead / GPU  = activations + CUDA graphs + communication buffers (calibrated, see OVERHEAD_*)
+overhead / GPU  = activations + CUDA graphs + communication buffers (calibrated per vLLM version, see CALIBRATION)
 KV tokens       = (budget - weights - overhead) / KV bytes per token, minimum over stages
 
 DP replicas do not change any per-GPU number; each replica has its own KV cache.
@@ -19,12 +19,18 @@ from .model_spec import ModelSpec
 
 GiB = 1024 ** 3
 
-# Overhead calibration (GiB per GPU). Fit on: Qwen2.5-0.5B TP1/TP2/PP2 (vLLM 0.31, this node, 2026-11-08) and
-# Llama-3.1-8B TP1 (vLLM 0.8.5, this node, LoadCast Exp 9). Activation memory grows with the hidden size.
-OVERHEAD_BASE = 0.544         # context, sampler, CUDA graphs at hidden -> 0
-OVERHEAD_PER_HIDDEN = 0.000609  # GiB per hidden unit (0.5B: 1.09 GiB, 8B: 3.04 GiB)
-OVERHEAD_TP_EXTRA = 0.55      # communication buffers when TP > 1 (0.5B: 1.64 - 1.09)
-OVERHEAD_PP_FACTOR = 0.74     # each PP stage profiles fewer layers / smaller graphs (0.5B: 0.81 / 1.09)
+# Overhead per GPU (GiB) = base + per_hidden x hidden / TP  [x pp_factor when PP > 1]  + tp_extra when TP > 1
+# Activation memory shrinks with TP; communication buffers appear when TP > 1. Calibrated per vLLM version,
+# because overhead changes between versions (Llama-8B: 3.04 GiB on 0.8.5; a 7B uses 1.98 GiB on 0.31).
+CALIBRATION = {
+    # Fit (2026-11-08, gpu-02): base/per_hidden from Qwen2.5-0.5B TP1 (1.09) and Qwen2.5-7B TP1 (1.98);
+    # tp_extra from Qwen2.5-0.5B TP2 (1.64); pp_factor from Qwen2.5-0.5B PP2 (0.81).
+    # Not used in the fit: Qwen2.5-7B TP2.
+    "0.31": dict(base=0.795, per_hidden=0.000329, tp_extra=0.70, pp_factor=0.74),
+    # Fit from LoadCast Exp 9/11 (vLLM 0.8.5): Llama-3.1-8B TP1 (3.04) and TP2 (4.49); not used: Llama-3.1-70B TP4.
+    "0.8.5": dict(base=0.544, per_hidden=0.000609, tp_extra=2.70, pp_factor=0.74),
+}
+DEFAULT_VERSION = "0.31"
 
 
 @dataclass
@@ -50,23 +56,25 @@ def stage_layers(layers: int, pp: int) -> list[int]:
     return [base + (1 if i < rem else 0) for i in range(pp)]
 
 
-def overhead_gib(m: ModelSpec, tp: int, pp: int) -> float:
-    o = OVERHEAD_BASE + OVERHEAD_PER_HIDDEN * m.hidden
+def overhead_gib(m: ModelSpec, tp: int, pp: int, vllm_version: str = DEFAULT_VERSION) -> float:
+    c = CALIBRATION[vllm_version]
+    o = c["base"] + c["per_hidden"] * m.hidden / tp
     if pp > 1:
-        o *= OVERHEAD_PP_FACTOR
+        o *= c["pp_factor"]
     if tp > 1:
-        o += OVERHEAD_TP_EXTRA
+        o += c["tp_extra"]
     return o
 
 
 def estimate(m: ModelSpec, tp: int = 1, pp: int = 1, gpu_mem_gib: float = 80.0,
-             mem_util: float = 0.9, max_model_len: int | None = None) -> MemoryEstimate:
+             mem_util: float = 0.9, max_model_len: int | None = None,
+             vllm_version: str = DEFAULT_VERSION) -> MemoryEstimate:
     budget = mem_util * gpu_mem_gib
     b = m.dtype_bytes
     embed = m.embed_params * b
     layer = m.layer_params * b
     kv_heads_per_gpu = math.ceil(m.kv_heads / tp)       # KV heads are replicated when TP > kv_heads
-    over = overhead_gib(m, tp, pp)
+    over = overhead_gib(m, tp, pp, vllm_version)
 
     worst_kv_tokens, worst = None, None
     for i, n in enumerate(stage_layers(m.layers, pp)):
