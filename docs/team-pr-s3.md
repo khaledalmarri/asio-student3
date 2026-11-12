@@ -41,7 +41,7 @@ GPU UUIDs only.
 | deployment `pytest` (in-memory + PostgreSQL 16, incl. 6 concurrent workers × 40 jobs, each run exactly once) | MOCKED runtime / S1 | 87 passed |
 | parallelism `pytest` | SIMULATED | 6 passed |
 | `ruff check`, `ruff format --check`, `mypy` (both packages) | offline | clean |
-| `scripts/smoke_gpu.py` on gpu-02 (docker → READY → chat completion → verified stop) | REAL_GPU runtime, MOCKED S1 | see PR comment |
+| `scripts/smoke_gpu.py` on gpu-02: Qwen2.5-0.5B pinned to 1 GPU by UUID → READY in 87 s → chat completion 200 → DRAINING → invalidate → verified stop → release | REAL_GPU runtime, MOCKED S1 | passed |
 
 ## How to run
 

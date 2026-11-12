@@ -41,23 +41,28 @@ from asio_deployment.s1 import FakeS1
 from asio_deployment.store import MemoryStore
 
 
-def pick_gpu(min_free_mib: int) -> str:
+def pick_gpus(n: int, min_free_mib: int) -> list[str]:
+    """The n GPUs with the most free memory; refuses if any of them lacks `min_free_mib`."""
     out = subprocess.run(
         ["nvidia-smi", "--query-gpu=uuid,memory.free", "--format=csv,noheader,nounits"],
         capture_output=True,
         text=True,
         check=True,
     ).stdout
-    rows = [(int(f), u) for u, f in (x.split(", ") for x in out.strip().splitlines())]
-    free, uuid = max(rows)
-    if free < min_free_mib:
-        raise SystemExit(f"no GPU has {min_free_mib} MiB free (best: {free} MiB on {uuid})")
-    return uuid
+    rows = sorted(
+        ((int(f), u) for u, f in (x.split(", ") for x in out.strip().splitlines())), reverse=True
+    )[:n]
+    if len(rows) < n or rows[-1][0] < min_free_mib:
+        raise SystemExit(f"need {n} GPU(s) with {min_free_mib} MiB free; best: {rows}")
+    return [u for _, u in rows]
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--gpu-uuid", default="auto", help="GPU UUID, or 'auto' = most free memory")
+    ap.add_argument(
+        "--gpu-uuid", default="auto", help="comma-separated GPU UUIDs, or 'auto' = most free memory"
+    )
+    ap.add_argument("--tp", type=int, default=1, help="tensor-parallel size = number of GPUs")
     ap.add_argument("--hf-model", default="Qwen/Qwen2.5-0.5B-Instruct")
     ap.add_argument("--served-name", default="qwen-demo-small")
     ap.add_argument("--port", type=int, default=8411)
@@ -65,14 +70,16 @@ def main() -> None:
     ap.add_argument("--out", default="s3-smoke-evidence.jsonl")
     a = ap.parse_args()
 
-    gpu = pick_gpu(int(a.mem_util * 81920) + 2048) if a.gpu_uuid == "auto" else a.gpu_uuid
+    need = int(a.mem_util * 81920) + 2048
+    gpus = pick_gpus(a.tp, need) if a.gpu_uuid == "auto" else a.gpu_uuid.split(",")
+    gpu = ",".join(gpus)
     now = datetime.now(UTC)
     s1 = FakeS1()
     s1.allocations["smoke-alloc"] = Allocation(
         id="smoke-alloc",
         kind=AllocationKind.SERVING,
         owner_id="s3-smoke",
-        gpu_uuids=[gpu],
+        gpu_uuids=gpus,
         node_id="gpu-02",
         start_at=now,
         end_at=now + timedelta(hours=1),
@@ -100,6 +107,8 @@ def main() -> None:
             port=a.port,
             hf_model=a.hf_model,
             vllm_args=[
+                "--tensor-parallel-size",
+                str(a.tp),
                 "--gpu-memory-utilization",
                 str(a.mem_util),
                 "--max-model-len",
@@ -119,7 +128,8 @@ def main() -> None:
     deploy_job = [j for j in store.list_jobs(d.id) if j.kind == JobKind.DEPLOY][0]
     record: dict = {
         "time": now.isoformat(timespec="seconds"),
-        "gpu_uuid": gpu,
+        "gpu_uuids": gpus,
+        "tp": a.tp,
         "hf_model": a.hf_model,
         "evidence": {"runtime": "REAL_GPU", "s1": "MOCKED"},
         "deploy": {
