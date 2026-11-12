@@ -316,3 +316,74 @@ def test_routing_only_entry_point_needs_no_allocation_or_container(env: Env) -> 
     env.controller.request_stop(d.id)
     env.drain_jobs()
     assert _pool(env, d.id)[1].readiness == Readiness.STOPPED
+
+
+# ------------------------------------------------------------------ pre-launch GPU check
+
+
+def test_busy_gpu_is_retried_then_fails_without_launching_or_releasing(env: Env) -> None:
+    env.runtime.gpu_free_mib[UUIDS[1]] = 3000  # someone outside ASIO is using it
+    d, _, _ = env.controller.create("admin-1", make_request())
+    env.runner.run_once()
+    job = _jobs(env, d.id, JobKind.DEPLOY)[0]
+    assert job.state == JobState.QUEUED and "GPU busy" in (job.last_error or "")
+    assert env.store.get_deployment(d.id).observed_state == ObservedState.PENDING  # type: ignore[union-attr]
+    for _ in range(job.max_attempts):
+        env.clock.advance(2)
+        env.runner.run_once()
+    job = _jobs(env, d.id, JobKind.DEPLOY)[0]
+    d2, p = _pool(env, d.id)
+    assert job.state == JobState.FAILED and job.result and job.result["gpu_busy"] is True
+    assert job.result["launched"] is False and UUIDS[1] in job.result["problems"][0]
+    assert env.runtime.started == [] and Readiness.READY not in env.published
+    assert p.readiness == Readiness.UNHEALTHY and d2.observed_state == ObservedState.FAILED
+    assert "activate" not in env.s1.names() and "release" not in env.s1.names()
+
+
+def test_gpu_that_frees_up_on_retry_launches(env: Env) -> None:
+    env.runtime.gpu_free_mib[UUIDS[0]] = 1000
+    d, _, _ = env.controller.create("admin-1", make_request())
+    env.runner.run_once()
+    assert env.runtime.started == []
+    env.runtime.gpu_free_mib[UUIDS[0]] = 80000
+    env.clock.advance(2)
+    env.drain_jobs()
+    d2, p = _pool(env, d.id)
+    assert p.readiness == Readiness.READY
+    job = _jobs(env, d.id, JobKind.DEPLOY)[0]
+    assert job.result and job.result["gpu_check"]["gpus"][UUIDS[0]]["free_mib"] == 80000
+
+
+def test_gpu_not_on_this_node_fails_at_once(env: Env) -> None:
+    env.runtime.missing_gpus.add(UUIDS[0])
+    d, _, _ = env.controller.create("admin-1", make_request())
+    env.runner.run_once()
+    job = _jobs(env, d.id, JobKind.DEPLOY)[0]
+    assert job.state == JobState.FAILED and job.attempt == 1
+    assert job.result and job.result["gpu_busy"] is False
+    assert "not on this node" in job.result["problems"][0]
+
+
+def test_need_follows_vllm_memory_share(env: Env) -> None:
+    # 0.3 x 81920 MiB + 1024 margin = 25600 MiB needed; 30000 free is enough, 20000 is not.
+    cfg = make_request().config.model_copy(
+        update={"vllm_args": ["--tensor-parallel-size", "2", "--gpu-memory-utilization", "0.3"]}
+    )
+    env.runtime.gpu_free_mib.update({UUIDS[0]: 30000, UUIDS[1]: 30000})
+    env.controller.create("admin-1", make_request(config=cfg))
+    env.drain_jobs()
+    assert len(env.runtime.started) == 1
+    env.runtime.gpu_free_mib.update({UUIDS[0]: 20000})
+    env.controller.create("admin-1", make_request("second", config=cfg))
+    env.runner.run_once()
+    assert len(env.runtime.started) == 1
+
+
+def test_exclusive_mode_refuses_a_gpu_with_any_process(env: Env) -> None:
+    env.controller.settings.require_exclusive_gpus = True
+    env.runtime.gpu_pids[UUIDS[0]] = [4242]
+    d, _, _ = env.controller.create("admin-1", make_request())
+    env.runner.run_once()
+    job = _jobs(env, d.id, JobKind.DEPLOY)[0]
+    assert job.state == JobState.QUEUED and "4242" in (job.last_error or "")
+    assert env.runtime.started == []

@@ -18,6 +18,9 @@ ASIO V3.1, contract draft 0.4. S3 P0: the Deployment Controller, the **shared du
 ## Lifecycles
 
 **Deploy** (DEPLOY job): S1 allocation must be `SERVING`, `COMMITTED|ACTIVE`, inside its window →
+**GPU check on the real node** (each granted UUID exists here and has the free memory vLLM will claim,
+`--gpu-memory-utilization` × total + 1 GiB; a busy GPU is retried, then the job fails with `gpu_busy`,
+nothing launched and nothing released, so S1 decides: reassign or quarantine) →
 `docker run --gpus "device=<granted UUIDs>"` → probe `/health` **and** `/v1/models` lists the served
 model → S1 `activate` → publish `READY`. Any failure (start error, crash, timeout) publishes
 `UNHEALTHY` — never `READY` (CT-05) — then stops and verifies; S1 `release` is called only with
@@ -57,6 +60,9 @@ runner.register(JobKind.START_WORKSPACE, start_workspace)
 runner.register(JobKind.STOP_WORKSPACE, stop_workspace)
 ```
 
+Before launching on a GPU, S5 can use the same physical check:
+`preflight(DockerRuntime().gpu_status(uuids), uuids, need_mib_per_gpu)` from `asio_deployment.runtime`.
+
 Enqueue with `owner_module="workspaces"` and a unique `request_ref` (enqueue is idempotent on
 `(owner_module, request_ref)`). `RetryLater` = transient (backoff, spends an attempt), `JobFailed` =
 permanent with a result, anything else = retried. Only one job per `target_ref` runs at a time.
@@ -81,7 +87,7 @@ uv run python scripts/smoke_gpu.py --gpu-uuid auto
 
 | Check | Label | Result |
 |---|---|---|
-| `pytest` on the in-memory store and on PostgreSQL 16 (incl. 6 workers × 40 jobs, each run exactly once) | MOCKED runtime / S1 | 87 passed |
+| `pytest` on the in-memory store and on PostgreSQL 16 (incl. 6 workers × 40 jobs, each run exactly once) | MOCKED runtime / S1 | 99 passed |
 | `ruff check`, `ruff format --check`, `mypy asio_deployment` | offline | clean |
 | `scripts/smoke_gpu.py` on gpu-02, Qwen2.5-0.5B, 1 GPU by UUID (2026-11-12): READY in 87 s → chat completion 200 → verified stop; S1 calls in order `get, get, activate, invalidate, release` | REAL_GPU runtime, MOCKED S1 | passed |
 | same with `--tp 2`: 2 GPUs by UUID, TP=2 → READY in 102 s → chat completion 200 → verified stop | REAL_GPU runtime, MOCKED S1 | passed |

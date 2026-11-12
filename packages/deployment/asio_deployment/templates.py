@@ -115,6 +115,20 @@ def _int_arg(args: list[str], flag: str, default: int = 1) -> int:
     return default
 
 
+def gpu_memory_utilization(vllm_args: list[str]) -> float:
+    """vLLM's `--gpu-memory-utilization` (its default is 0.9): the share of each GPU it claims."""
+    if "--gpu-memory-utilization" in vllm_args:
+        i = vllm_args.index("--gpu-memory-utilization")
+        try:
+            v = float(vllm_args[i + 1])
+        except (IndexError, ValueError) as e:
+            raise TemplateError("bad value for --gpu-memory-utilization") from e
+        if not 0 < v <= 1:
+            raise TemplateError("--gpu-memory-utilization must be in (0, 1]")
+        return v
+    return 0.9
+
+
 def gpus_required(vllm_args: list[str]) -> int:
     return (
         _int_arg(vllm_args, "--tensor-parallel-size")

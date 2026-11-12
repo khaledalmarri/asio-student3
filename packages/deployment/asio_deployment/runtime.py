@@ -11,7 +11,7 @@ from __future__ import annotations
 import os
 import subprocess
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any, Protocol
 
 import httpx
@@ -23,6 +23,56 @@ Runner = Callable[[Sequence[str]], subprocess.CompletedProcess[str]]
 
 def _run(cmd: Sequence[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(list(cmd), capture_output=True, text=True, timeout=120)
+
+
+@dataclass
+class GpuStatus:
+    uuid: str
+    total_mib: int
+    used_mib: int
+    free_mib: int
+    util_pct: int
+    pids: list[int] = field(default_factory=list)
+
+
+@dataclass
+class PreflightResult:
+    ok: bool
+    problems: list[str]
+    permanent: bool  # True when retrying cannot help (e.g. the GPU is not on this node)
+    evidence: dict[str, Any]
+
+
+def preflight(
+    status: dict[str, GpuStatus],
+    gpu_uuids: list[str],
+    need_mib_per_gpu: int,
+    *,
+    require_exclusive: bool = False,
+) -> PreflightResult:
+    """Is every granted GPU really usable *right now*?
+
+    S1's records say a GPU is ours; this checks the physical node just before launch, because on a
+    shared node something outside ASIO can still be using it. Shared by S3 (models) and S5
+    (workspaces): call `runtime.gpu_status(uuids)` and pass the result here.
+    """
+    problems: list[str] = []
+    permanent = False
+    for u in gpu_uuids:
+        st = status.get(u)
+        if st is None:
+            problems.append(f"{u} is not on this node")
+            permanent = True
+            continue
+        if st.free_mib < need_mib_per_gpu:
+            problems.append(f"{u}: {st.free_mib} MiB free < {need_mib_per_gpu} MiB needed")
+        if require_exclusive and st.pids:
+            problems.append(f"{u}: already in use by process(es) {st.pids}")
+    evidence = {
+        "need_mib_per_gpu": need_mib_per_gpu,
+        "gpus": {u: asdict(status[u]) for u in gpu_uuids if u in status},
+    }
+    return PreflightResult(not problems, problems, permanent, evidence)
 
 
 @dataclass
@@ -41,6 +91,7 @@ class Runtime(Protocol):
     def verify_stopped(
         self, name: str, pids: list[int], gpu_uuids: list[str]
     ) -> tuple[bool, dict[str, Any]]: ...
+    def gpu_status(self, gpu_uuids: list[str]) -> dict[str, GpuStatus]: ...
 
 
 class RuntimeError_(Exception):
@@ -99,6 +150,33 @@ class DockerRuntime:
             parts = [x.strip() for x in line.split(",")]
             if len(parts) >= 2 and parts[0] in out and parts[1].isdigit():
                 out[parts[0]].append(int(parts[1]))
+        return out
+
+    def gpu_status(self, gpu_uuids: list[str]) -> dict[str, GpuStatus]:
+        """Live memory/utilization/processes of the given GPUs (missing UUIDs are left out)."""
+        p = self.run(
+            [
+                "nvidia-smi",
+                "--query-gpu=uuid,memory.total,memory.used,memory.free,utilization.gpu",
+                "--format=csv,noheader,nounits",
+            ]
+        )
+        if p.returncode != 0:
+            raise RuntimeError_(f"nvidia-smi failed: {p.stderr.strip()[:300]}")
+        wanted = set(gpu_uuids)
+        out: dict[str, GpuStatus] = {}
+        for line in p.stdout.splitlines():
+            parts = [x.strip() for x in line.split(",")]
+            if len(parts) < 5 or parts[0] not in wanted:
+                continue
+            try:
+                total, used, free = int(parts[1]), int(parts[2]), int(parts[3])
+                util = int(parts[4]) if parts[4].isdigit() else 0
+            except ValueError:
+                continue
+            out[parts[0]] = GpuStatus(parts[0], total, used, free, util)
+        for u, pids in self.gpu_pids(list(out)).items():
+            out[u].pids = pids
         return out
 
     def verify_stopped(
@@ -170,6 +248,9 @@ class FakeRuntime:
     fail_start: bool = False
     crash_after_start: bool = False
     leave_pids: bool = False
+    gpu_free_mib: dict[str, int] = field(default_factory=dict)  # default: 80000 MiB free
+    gpu_pids: dict[str, list[int]] = field(default_factory=dict)
+    missing_gpus: set[str] = field(default_factory=set)
     containers: dict[str, dict[str, Any]] = field(default_factory=dict)
     started: list[LaunchSpec] = field(default_factory=list)
     _next_pid: int = 40000
@@ -187,6 +268,15 @@ class FakeRuntime:
 
     def exists(self, name: str) -> bool:
         return name in self.containers
+
+    def gpu_status(self, gpu_uuids: list[str]) -> dict[str, GpuStatus]:
+        out = {}
+        for u in gpu_uuids:
+            if u in self.missing_gpus:
+                continue
+            free = self.gpu_free_mib.get(u, 80000)
+            out[u] = GpuStatus(u, 81920, 81920 - free, free, 0, list(self.gpu_pids.get(u, [])))
+        return out
 
     def is_running(self, name: str) -> bool:
         return bool(self.containers.get(name, {}).get("running"))

@@ -7,8 +7,13 @@ from datetime import UTC, datetime
 import pytest
 
 from asio_deployment.contracts import Backend, Deployment, DeploymentConfig, ResourceClass
-from asio_deployment.runtime import DockerRuntime, RuntimeError_
-from asio_deployment.templates import TemplateError, build_launch_spec, gpus_required
+from asio_deployment.runtime import DockerRuntime, RuntimeError_, preflight
+from asio_deployment.templates import (
+    TemplateError,
+    build_launch_spec,
+    gpu_memory_utilization,
+    gpus_required,
+)
 
 NOW = datetime(2026, 11, 12, tzinfo=UTC)
 
@@ -114,3 +119,29 @@ def test_verify_fails_closed_when_nvidia_smi_is_unavailable() -> None:
     )
     ok, ev = DockerRuntime(run=shell).verify_stopped("asio-s3-dep_abc", [], ["GPU-a"])
     assert not ok and "gpu_check_error" in ev
+
+
+def test_gpu_status_reads_memory_and_processes() -> None:
+    shell = FakeShell(
+        {
+            "nvidia-smi --query-gpu=uuid,memory.total,memory.used,memory.free,utilization.gpu": (
+                0,
+                "GPU-a, 81920, 61440, 20480, 99\nGPU-b, 81920, 0, 81920, 0\n"
+                "GPU-c, 81920, 1, 2, 3\n",
+            ),
+            "nvidia-smi --query-compute-apps=gpu_uuid,pid": (0, "GPU-a, 999\n"),
+        }
+    )
+    st = DockerRuntime(run=shell).gpu_status(["GPU-a", "GPU-b", "GPU-x"])
+    assert set(st) == {"GPU-a", "GPU-b"}  # GPU-x is not on this node
+    assert (st["GPU-a"].free_mib, st["GPU-a"].util_pct, st["GPU-a"].pids) == (20480, 99, [999])
+    res = preflight(st, ["GPU-a", "GPU-b", "GPU-x"], 25600)
+    assert not res.ok and res.permanent and len(res.problems) == 2
+    assert preflight(st, ["GPU-b"], 25600).ok
+
+
+def test_gpu_memory_utilization_parsing() -> None:
+    assert gpu_memory_utilization([]) == 0.9
+    assert gpu_memory_utilization(["--gpu-memory-utilization", "0.25"]) == 0.25
+    with pytest.raises(TemplateError):
+        gpu_memory_utilization(["--gpu-memory-utilization", "2"])

@@ -27,6 +27,10 @@ GPU UUIDs only.
 - **Drain / stop / P0 serving-lease expiry:** `DRAINING` → S1 invalidation + acknowledgment → wait
   for in-flight requests → stop → verify → `STOPPED` → S1 release. The worker starts the drain before
   the allocation ends.
+- **GPU check before launch:** S1's records say a GPU is ours; the worker also checks the real node
+  (`nvidia-smi`) that each granted UUID exists and has the free memory vLLM will claim. A busy GPU is
+  retried, then the deployment fails with `gpu_busy` (nothing launched, nothing released, S1 decides).
+  S5 can reuse the same check.
 - **GPU-pinned vLLM template:** `--gpus "device=<UUIDs>"`, image allowlist, TP×PP×DP must equal the
   granted GPU count.
 - **Planner (P1):** `POST /api/v1/parallelism/plan` returns a `ParallelismPlan` with
@@ -38,7 +42,7 @@ GPU UUIDs only.
 
 | Check | Label | Result |
 |---|---|---|
-| deployment `pytest` (in-memory + PostgreSQL 16, incl. 6 concurrent workers × 40 jobs, each run exactly once) | MOCKED runtime / S1 | 87 passed |
+| deployment `pytest` (in-memory + PostgreSQL 16, incl. 6 concurrent workers × 40 jobs, each run exactly once) | MOCKED runtime / S1 | 99 passed |
 | parallelism `pytest` | SIMULATED | 6 passed |
 | `ruff check`, `ruff format --check`, `mypy` (both packages) | offline | clean |
 | `scripts/smoke_gpu.py` on gpu-02: Qwen2.5-0.5B pinned to 1 GPU by UUID → READY in 87 s → chat completion 200 → DRAINING → invalidate → verified stop → release | REAL_GPU runtime, MOCKED S1 | passed |

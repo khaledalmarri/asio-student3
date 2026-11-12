@@ -42,10 +42,10 @@ from .contracts import (
 )
 from .errors import ApiError
 from .runner import Clock, JobContext, JobFailed, RetryLater, utcnow
-from .runtime import ProbeResult, Runtime, in_flight, probe
+from .runtime import ProbeResult, Runtime, RuntimeError_, in_flight, preflight, probe
 from .s1 import S1Client, S1Error
 from .store import DuplicateRequestRef, Store
-from .templates import TemplateError, build_launch_spec
+from .templates import TemplateError, build_launch_spec, gpu_memory_utilization
 
 OWNER_MODULE = "deployment"
 
@@ -96,6 +96,13 @@ class ControllerSettings:
     max_drain_timeout_s: float = 600.0
     # Start stopping a serving deployment this long before its allocation ends (plus drain time).
     expiry_margin_s: float = 60.0
+    # Pre-launch GPU check: free memory needed = vLLM's share of the GPU + this margin.
+    gpu_free_margin_mib: int = 1024
+    # True = refuse a GPU that has any process on it. Off by default: on a shared node (gpu-02)
+    # other tenants' processes are normal, and S1's allocation is what makes the GPU ours.
+    require_exclusive_gpus: bool = field(
+        default_factory=lambda: os.environ.get("ASIO_S3_REQUIRE_EXCLUSIVE_GPUS") == "1"
+    )
 
 
 class DeploymentController:
@@ -386,13 +393,17 @@ class DeploymentController:
             self._observe(d, ObservedState.FAILED, f"template: {e}")
             raise JobFailed(str(e), {"launched": False}) from e
         d.container_name = spec.name
-        self._observe(d, ObservedState.STARTING)
 
         if not self.runtime.exists(spec.name):  # a retry after lease loss reuses the container
+            gpu_check = self._preflight_gpus(ctx, d)
+            self._observe(d, ObservedState.STARTING)
             try:
                 self.runtime.start(spec)
             except Exception as e:
                 return self._fail_launch(ctx, d, f"start failed: {e}")
+        else:
+            gpu_check = {"skipped": "container already running from an earlier attempt"}
+            self._observe(d, ObservedState.STARTING)
 
         pool = self.store.get_pool(d.pool_id)
         assert pool is not None
@@ -436,8 +447,55 @@ class DeploymentController:
             "gpu_uuids": d.gpu_uuids,
             "endpoint_url": pool.endpoint_url,
             "probe": last.detail,
+            "gpu_check": gpu_check,
             "evidence_label": "REAL_GPU",
         }
+
+    def _preflight_gpus(self, ctx: JobContext, d: Deployment) -> dict[str, Any]:
+        """Check the granted GPUs on the real node right before `docker run`.
+
+        Busy GPU: retried with backoff (it may be our own previous container still freeing
+        memory); after the job's last attempt the deployment FAILS with `gpu_busy` and nothing was
+        launched, so there is nothing to clean up. S3 does not release the allocation in that case:
+        the GPU is busy with something S3 did not start, so S1 decides (reassign or quarantine).
+        A GPU UUID that is not on this node fails at once.
+        """
+        assert self.runtime is not None
+        util = gpu_memory_utilization(d.config.vllm_args)
+        try:
+            status = self.runtime.gpu_status(d.gpu_uuids)
+        except RuntimeError_ as e:
+            if ctx.job.attempt < ctx.job.max_attempts:
+                raise RetryLater(f"GPU check unavailable: {e}") from e
+            return self._fail_preflight(d, [f"GPU check unavailable: {e}"], {}, gpu_busy=False)
+        totals = [st.total_mib for st in status.values()] or [0]
+        need = int(util * max(totals)) + self.settings.gpu_free_margin_mib
+        res = preflight(
+            status, d.gpu_uuids, need, require_exclusive=self.settings.require_exclusive_gpus
+        )
+        if res.ok:
+            return res.evidence
+        if not res.permanent and ctx.job.attempt < ctx.job.max_attempts:
+            raise RetryLater("GPU busy: " + "; ".join(res.problems))
+        return self._fail_preflight(d, res.problems, res.evidence, gpu_busy=not res.permanent)
+
+    def _fail_preflight(
+        self, d: Deployment, problems: list[str], evidence: dict[str, Any], *, gpu_busy: bool
+    ) -> dict[str, Any]:
+        msg = "GPU not usable: " + "; ".join(problems)
+        self._publish(d, Readiness.UNHEALTHY)
+        self._observe(d, ObservedState.FAILED, msg)
+        raise JobFailed(
+            msg,
+            {
+                "ready": False,
+                "launched": False,
+                "gpu_busy": gpu_busy,
+                "gpu_check": evidence,
+                "problems": problems,
+                "s1_action": "reassign or quarantine; S3 launched nothing and released nothing",
+            },
+        )
 
     def _deploy_routing_only(self, ctx: JobContext, d: Deployment) -> dict[str, Any]:
         pool = self.store.get_pool(d.pool_id)
