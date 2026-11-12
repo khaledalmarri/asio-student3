@@ -4,7 +4,19 @@ Given a model, a workload and a GPU allocation, choose a feasible parallelism
 configuration (TP / PP / DP / CP, aggregated or prefill/decode-disaggregated),
 explain the choice, and deploy it on real GPUs.
 
-Owned APIs (to agree with the team): `/parallelism/plan`, `/parallelism/benchmark`.
+## Team integration (ASIO V3.1, contract draft 0.4)
+
+The team contract makes S3 the owner of deployment itself (P0) and the planner P1. The code that
+goes into the team repo lives in `packages/`, laid out exactly like the team repo:
+
+| Package | Contract role | Copy to |
+|---|---|---|
+| `packages/deployment` | P0: Deployment Controller, shared durable job runner, ServingPool readiness writer, `/api/v1/deployments` | `ASIO/packages/deployment` |
+| `packages/parallelism` | P1: `/api/v1/parallelism/plan` → `ParallelismPlan` (planner core from `planner/`) | `ASIO/packages/parallelism` |
+
+PR text for the team repo: `docs/team-pr-s3.md`. The root `planner/`, `service/` and `bench.py` are
+the research prototype that produced the calibration; `service/app.py` is superseded by the
+packages (it launched containers from the API process, which the contract forbids).
 
 ## Build steps
 
