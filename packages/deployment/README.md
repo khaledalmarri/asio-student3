@@ -84,7 +84,7 @@ uv run python scripts/smoke_gpu.py --gpu-uuid auto
 | `pytest` on the in-memory store and on PostgreSQL 16 (incl. 6 workers × 40 jobs, each run exactly once) | MOCKED runtime / S1 | 87 passed |
 | `ruff check`, `ruff format --check`, `mypy asio_deployment` | offline | clean |
 | `scripts/smoke_gpu.py` on gpu-02, Qwen2.5-0.5B, 1 GPU by UUID (2026-11-12): READY in 87 s → chat completion 200 → verified stop; S1 calls in order `get, get, activate, invalidate, release` | REAL_GPU runtime, MOCKED S1 | passed |
-| same with `--tp 2` (2 GPUs by UUID) | REAL_GPU runtime, MOCKED S1 | to be run |
+| same with `--tp 2`: 2 GPUs by UUID, TP=2 → READY in 102 s → chat completion 200 → verified stop | REAL_GPU runtime, MOCKED S1 | passed |
 
 ## Open questions
 

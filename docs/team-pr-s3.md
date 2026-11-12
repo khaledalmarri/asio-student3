@@ -42,6 +42,7 @@ GPU UUIDs only.
 | parallelism `pytest` | SIMULATED | 6 passed |
 | `ruff check`, `ruff format --check`, `mypy` (both packages) | offline | clean |
 | `scripts/smoke_gpu.py` on gpu-02: Qwen2.5-0.5B pinned to 1 GPU by UUID → READY in 87 s → chat completion 200 → DRAINING → invalidate → verified stop → release | REAL_GPU runtime, MOCKED S1 | passed |
+| same with `--tp 2`: Qwen2.5-0.5B split across 2 GPUs pinned by UUID → READY in 102 s → chat completion 200 → verified stop → release | REAL_GPU runtime, MOCKED S1 | passed |
 
 ## How to run
 
